@@ -8,6 +8,7 @@ import test  # import test.py to get mAP after each epoch
 from models import *
 from utils.datasets import *
 from utils.utils import *
+from visdom import Visdom
 
 mixed_precision = True
 try:  # Mixed precision training https://github.com/NVIDIA/apex
@@ -46,6 +47,26 @@ if f:
     for k, v in zip(hyp.keys(), np.loadtxt(f[0])):
         hyp[k] = v
 
+class VisdomLinePlotter(object):
+    """Plots to Visdom"""
+    def __init__(self, env_name='main'):
+        self.viz = Visdom()
+        self.env = env_name
+        self.plots = {}
+    def plot(self, var_name, split_name, title_name, x, y):
+        # print("\n\n\n---->", type(y), " ", y, " ", y.item(),"<---\n\n")
+        y=y.item()
+        if var_name not in self.plots:
+            self.plots[var_name] = self.viz.line(X=np.array([x,x]), Y=np.array([y,y]), env=self.env, opts=dict(
+                legend=[split_name],
+                title=title_name,
+                xlabel='Epochs',
+                ylabel=var_name
+            ))
+        else:
+            self.viz.line(X=np.array([x]), Y=np.array([y]), env=self.env, win=self.plots[var_name], name=split_name, update = 'append')
+plotter = VisdomLinePlotter(env_name='Plots')
+
 
 def train():
     cfg = opt.cfg
@@ -80,7 +101,7 @@ def train():
         os.remove(f)
 
     # Initialize model
-    model = Darknet(cfg, arc=opt.arc).to(device)
+    model = YOLOV3(cfg, arc=opt.arc).to(device)
 
     # Optimizer
     pg0, pg1 = [], []  # optimizer parameter groups
@@ -101,7 +122,7 @@ def train():
     cutoff = -1  # backbone reaches to cutoff layer
     start_epoch = 0
     best_fitness = 0.
-    attempt_download(weights)
+    try_download(weights)
     if weights.endswith('.pt'):  # pytorch format
         # possible weights are 'last.pt', 'yolov3-spp.pt', 'yolov3-tiny.pt' etc.
         if opt.bucket:
@@ -191,7 +212,7 @@ def train():
                                   hyp=hyp,  # augmentation hyperparameters
                                   rect=opt.rect,  # rectangular training
                                   image_weights=opt.img_weights,
-                                  cache_labels=True if epochs > 10 else False,
+                                  cache_labels=False if epochs > 10 else False,
                                   cache_images=False if opt.prebias else opt.cache_images)
 
     # Dataloader
@@ -269,6 +290,8 @@ def train():
 
             # Compute loss
             loss, loss_items = compute_loss(pred, targets, model)
+
+
             if not torch.isfinite(loss):
                 print('WARNING: non-finite loss, ending training ', loss_items)
                 return results
@@ -297,6 +320,8 @@ def train():
 
             # end batch ------------------------------------------------------------------------------------------------
 
+        plotter.plot("loss", "train", "Train YOLOV3", epoch, loss)
+
         # Update scheduler
         scheduler.step()
 
@@ -306,15 +331,16 @@ def train():
             print_model_biases(model)
         else:
             # Calculate mAP (always test final epoch, skip first 10 if opt.nosave)
-            if not (opt.notest or (opt.nosave and epoch < 10)) or final_epoch:
-                with torch.no_grad():
-                    results, maps = test.test(cfg,
-                                              data,
-                                              batch_size=batch_size,
-                                              img_size=opt.img_size,
-                                              model=model,
-                                              conf_thres=0.001 if final_epoch and epoch > 0 else 0.1,  # 0.1 for speed
-                                              save_json=final_epoch and epoch > 0 and 'coco.data' in data)
+            if epoch > 200:
+                if not (opt.notest or (opt.nosave and epoch < 10)) or final_epoch:
+                    with torch.no_grad():
+                        results, maps = test.test(cfg,
+                                                  data,
+                                                  batch_size=batch_size,
+                                                  img_size=opt.img_size,
+                                                  model=model,
+                                                  conf_thres=0.001 if final_epoch and epoch > 0 else 0.1,  # 0.1 for speed
+                                                  save_json=final_epoch and epoch > 0 and 'coco.data' in data)
 
         # Write epoch results
         with open(results_file, 'a') as f:
@@ -385,10 +411,10 @@ def prebias():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', type=int, default=273)  # 500200 batches at bs 16, 117263 images = 273 epochs
-    parser.add_argument('--batch-size', type=int, default=32)  # effective bs = batch_size * accumulate = 16 * 4 = 64
+    parser.add_argument('--batch-size', type=int, default=8)  # effective bs = batch_size * accumulate = 8? * 2? = 16
     parser.add_argument('--accumulate', type=int, default=2, help='batches to accumulate before optimizing')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
-    parser.add_argument('--data', type=str, default='data/coco.data', help='*.data file path')
+    parser.add_argument('--data', type=str, default='data/coco_500val.data', help='*.data file path')
     parser.add_argument('--multi-scale', action='store_true', help='adjust (67% - 150%) img_size every 10 batches')
     parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
     parser.add_argument('--rect', action='store_true', help='rectangular training')

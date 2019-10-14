@@ -24,10 +24,10 @@ def test(cfg,
         verbose = True
 
         # Initialize model
-        model = Darknet(cfg, img_size).to(device)
+        model = YOLOV3(cfg, img_size).to(device)
 
         # Load weights
-        attempt_download(weights)
+        try_download(weights)
         if weights.endswith('.pt'):  # pytorch format
             model.load_state_dict(torch.load(weights, map_location=device)['model'])
         else:  # darknet format
@@ -43,7 +43,7 @@ def test(cfg,
     data = parse_data_cfg(data)
     nc = int(data['classes'])  # number of classes
     test_path = data['valid']  # path to test images
-    names = load_classes(data['names'])  # class names
+    names = classes_load(data['names'])  # class names
 
     # Dataloader
     dataset = LoadImagesAndLabels(test_path, img_size, batch_size)

@@ -200,11 +200,11 @@ class YOLOLayer(nn.Module):
             return io.view(bs, -1, 5 + self.nc), p
 
 
-class Darknet(nn.Module):
+class YOLOV3(nn.Module):
     # YOLOv3 object detection model
 
     def __init__(self, cfg, img_size=(416, 416), arc='default'):
-        super(Darknet, self).__init__()
+        super(YOLOV3, self).__init__()
 
         self.module_defs = parse_model_cfg(cfg)
         self.module_list, self.routs = create_modules(self.module_defs, img_size, arc)
@@ -401,7 +401,7 @@ def convert(cfg='cfg/yolov3-spp.cfg', weights='weights/yolov3-spp.weights'):
         print('Error: extension not supported.')
 
 
-def attempt_download(weights):
+def try_download(weights):
     # Attempt to download pretrained weights if not found locally
 
     msg = weights + ' missing, download from https://drive.google.com/drive/folders/1uxgUBemJVw9wZsdpboYbzUN4bcRhsuAI'
