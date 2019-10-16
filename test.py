@@ -40,13 +40,13 @@ def test(cfg,
         verbose = False
 
     # Configure run
-    data = parse_data_cfg(data)
+    data = data_cfg_parser(data)
     nc = int(data['classes'])  # number of classes
     test_path = data['valid']  # path to test images
     names = classes_load(data['names'])  # class names
 
     # Dataloader
-    dataset = LoadImagesAndLabels(test_path, img_size, batch_size)
+    dataset = ImagesPlusLabelLoader(test_path, img_size, batch_size)
     dataloader = DataLoader(dataset,
                             batch_size=batch_size,
                             num_workers=min([os.cpu_count(), batch_size, 16]),

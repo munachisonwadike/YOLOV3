@@ -42,7 +42,7 @@ def detect():
 
     # set the image loader, and load the classes and colors
     dataset = ImageLoader(source_image, image_size=image_size)
-    classes_list = classes_load(parse_data_cfg(args.data)['names'])
+    classes_list = classes_load(data_cfg_parser(args.data)['names'])
     color_list = [[random.randint(0, 255) for i in range(3)] for class_ in range(len(classes_list))]
 
     
