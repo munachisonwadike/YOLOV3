@@ -4,8 +4,8 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 # print(dir_path)
 
-fp = open('./data/coco_500img.txt', 'r')
-fp2 = open('./data/coco_500img2.txt', 'w')
+fp = open('./data/coco_16img.txt', 'r')
+fp2 = open('./data/coco_16img2.txt', 'w')
 
 for line in fp:
 	# print(line)
@@ -15,3 +15,6 @@ for line in fp:
 
 fp.close()
 fp2.close()
+
+
+os.system('mv ./data/coco_16img2.txt ./data/coco_16img.txt')
