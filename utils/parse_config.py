@@ -1,42 +1,42 @@
 import numpy as np
 
-
-def parse_model_cfg(path):
-    # Parses the yolo-v3 layer configuration file and returns module definitions
+# Parses yolo configuration file, determining network architecture 
+def model_cfg_parser(path):
     file = open(path, 'r')
     lines = file.read().split('\n')
-    lines = [x for x in lines if x and not x.startswith('#')]
-    lines = [x.rstrip().lstrip() for x in lines]  # get rid of fringe whitespaces
-    mdefs = []  # module definitions
-    for line in lines:
-        if line.startswith('['):  # This marks the start of a new block
-            mdefs.append({})
-            mdefs[-1]['type'] = line[1:-1].rstrip()
-            if mdefs[-1]['type'] == 'convolutional':
-                mdefs[-1]['batch_normalize'] = 0  # pre-populate with zeros (may be overwritten later)
+    lines = [line for line in lines if line and not line.startswith('#')]
+    lines = [line.rstrip().lstrip() for line in lines]  
+    module = []   
+    for ln in lines:
+        # Each new block is identified with brackets []
+        if ln.startswith('['):   
+            module.append({})
+            module[-1]['type'] = ln[1:-1].rstrip()
+            if module[-1]['type'] == 'convolutional':
+                module[-1]['batch_normalize'] = 0  
+        # If we are not at a new block, we are still in the old one
         else:
-            key, val = line.split("=")
-            key = key.rstrip()
+            k, value = ln.split("=")
+            k = k.rstrip()
 
-            if 'anchors' in key:
-                mdefs[-1][key] = np.array([float(x) for x in val.split(',')]).reshape((-1, 2))  # np anchors
+            if 'anchors' in k:
+                module[-1][k] = np.array([float(x) for x in value.split(',')]).reshape((-1, 2))  
             else:
-                mdefs[-1][key] = val.strip()
+                module[-1][k] = value.strip()
 
-    return mdefs
+    return module
 
-
-def parse_data_cfg(path):
-    # Parses the data configuration file
-    options = dict()
+# Parses the .data configuration file
+def data_cfg_parser(path):
+    conf = {}
     with open(path, 'r') as fp:
         lines = fp.readlines()
 
-    for line in lines:
-        line = line.strip()
-        if line == '' or line.startswith('#'):
+    for ln in lines:
+        ln = ln.strip()
+        if ln == '' or ln.startswith('#'): #ignore comments
             continue
-        key, val = line.split('=')
-        options[key.strip()] = val.strip()
+        k, value = ln.split('=')
+        conf[k.strip()] = value.strip()
 
-    return options
+    return conf

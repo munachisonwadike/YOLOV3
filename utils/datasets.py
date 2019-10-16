@@ -223,7 +223,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
         return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years
 
 
-class LoadImagesAndLabels(Dataset):  # for training/testing
+class ImagesPlusLabelLoader(Dataset):  # for training/testing
     def __init__(self, path, img_size=416, batch_size=16, augment=False, hyp=None, rect=True, image_weights=False,
                  cache_labels=False, cache_images=False):
         path = str(Path(path))  # os-agnostic
@@ -236,7 +236,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         nb = bi[-1] + 1  # number of batches
         assert n > 0, 'No images found in %s' % path
 
-        self.n = n
+        self.num_imgs = n
         self.batch = bi  # batch index of image
         self.img_size = img_size
         self.augment = augment

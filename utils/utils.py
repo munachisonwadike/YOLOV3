@@ -29,7 +29,7 @@ def floatn(x, n=3):  # format floats to n decimals
     return float(format(x, '.%gf' % n))
 
 
-def init_seeds(seed=0):
+def seed_init(seed=0):
     random.seed(seed)
     np.random.seed(seed)
     torch_utils.init_seeds(seed=seed)
@@ -584,7 +584,7 @@ def strip_optimizer(f='weights/last.pt'):  # from utils.utils import *; strip_op
     torch.save(x, f)
 
 
-def create_backbone(f='weights/last.pt'):  # from utils.utils import *; create_backbone()
+def backbone_generate(f='weights/last.pt'):  # from utils.utils import *; create_backbone()
     # create a backbone from a *.pt file
     x = torch.load(f)
     x['optimizer'] = None
@@ -672,11 +672,11 @@ def coco_single_class_labels(path='../coco/labels/train2014/', label_class=43):
 
 def kmeans_targets(path='../coco/trainvalno5k.txt', n=9, img_size=416):  # from utils.utils import *; kmeans_targets()
     # Produces a list of target kmeans suitable for use in *.cfg files
-    from utils.datasets import LoadImagesAndLabels
+    from utils.datasets import ImagesPlusLabelLoader
     from scipy import cluster
 
     # Get label wh
-    dataset = LoadImagesAndLabels(path, augment=True, rect=True, cache_labels=True)
+    dataset = ImagesPlusLabelLoader(path, augment=True, rect=True, cache_labels=True)
     for s, l in zip(dataset.shapes, dataset.labels):
         l[:, [1, 3]] *= s[0]  # normalized to pixels
         l[:, [2, 4]] *= s[1]
@@ -702,7 +702,7 @@ def kmeans_targets(path='../coco/trainvalno5k.txt', n=9, img_size=416):  # from 
     # plt.hist(biou.numpy().ravel(), 100)
 
 
-def print_mutation(hyp, results, bucket=''):
+def print_mutation(hyp, results):
     # Print mutation results to evolve.txt (for use with train.py --evolve)
     a = '%10s' * len(hyp) % tuple(hyp.keys())  # hyperparam keys
     b = '%10.3g' * len(hyp) % tuple(hyp.values())  # hyperparam values
@@ -761,7 +761,7 @@ def plot_wh_methods():  # from utils.utils import *; plot_wh_methods()
     fig.savefig('comparison.png', dpi=200)
 
 
-def plot_images(imgs, targets, paths=None, fname='images.jpg'):
+def image_plot(imgs, targets, paths=None, filename='images.jpg'):
     # Plots training images overlaid with targets
     imgs = imgs.cpu().numpy()
     targets = targets.cpu().numpy()
@@ -783,7 +783,7 @@ def plot_images(imgs, targets, paths=None, fname='images.jpg'):
             s = Path(paths[i]).name
             plt.title(s[:min(len(s), 40)], fontdict={'size': 8})  # limit to 40 characters
     fig.tight_layout()
-    fig.savefig(fname, dpi=200)
+    fig.savefig(filename, dpi=200)
     plt.close()
 
 
@@ -842,7 +842,7 @@ def plot_evolution_results(hyp):  # from utils.utils import *; plot_evolution_re
     plt.savefig('evolve.png', dpi=200)
 
 
-def plot_results(start=0, stop=0):  # from utils.utils import *; plot_results()
+def results_plotter(start=0, stop=0):  # from utils.utils import *; plot_results()
     # Plot training results files 'results*.txt'
     fig, ax = plt.subplots(2, 5, figsize=(14, 7))
     ax = ax.ravel()
