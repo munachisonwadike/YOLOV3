@@ -361,10 +361,10 @@ if __name__ == '__main__':
     parser.add_argument('--accumulate', type=int, default=2, help='batches to accumulate before optimizing')
     parser.add_argument('--adam', action='store_true', help='use adam optimizer')
     parser.add_argument('--arc', type=str, default='defaultpw', help='yolo architecture')  # # default with positive weights
-    parser.add_argument('--batch-size', type=int, default=8)  # effective bs = batch_size * accumulate = 8 *  = 16
+    parser.add_argument('--batch-size', type=int, default=6)  # effective bs = batch_size * accumulate = 8 *  = 16
     parser.add_argument('--cache-images', action='store_true', help='cache images for faster training')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
-    parser.add_argument('--data', type=str, default='data/coco_500val.data', help='*.data file path')
+    parser.add_argument('--data', type=str, default='data/coco_16img.data', help='*.data file path')
     parser.add_argument('--device', default='', help='device id (i.e. 0 or 0,1) or cpu')
     parser.add_argument('--epochs', type=int, default=273)   
     parser.add_argument('--evolve', action='store_true', help='evolve hyperparameters')
