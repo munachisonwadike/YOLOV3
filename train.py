@@ -327,7 +327,7 @@ def train():
         if save:
             with open(results_fl, 'r') as f:
                 chkpt = {'epoch': epoch,
-                         'best_mAP': best_mAP,
+                         'best_fitness': best_mAP,
                          'training_results': f.read(),
                          'model': model.module.state_dict() if type(
                              model) is nn.parallel.DistributedDataParallel else model.state_dict(),
@@ -359,7 +359,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--accumulate', type=int, default=2, help='batches to accumulate before optimizing')
     parser.add_argument('--adam', action='store_true', help='use adam optimizer')
-    parser.add_argument('--arc', type=str, default='defaultpw', help='yolo architecture')  # defaultpw, uCE, uBCE
+    parser.add_argument('--arc', type=str, default='defaultpw', help='yolo architecture')  # # default with positive weights
     parser.add_argument('--batch-size', type=int, default=8)  # effective bs = batch_size * accumulate = 8 *  = 16
     parser.add_argument('--cache-images', action='store_true', help='cache images for faster training')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
