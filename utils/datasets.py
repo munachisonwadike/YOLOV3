@@ -1,20 +1,19 @@
+from pathlib import Path
+from PIL import Image, ExifTags
+from threading import Thread
+from torch.utils.data import Dataset
+from tqdm import tqdm
+from utils.utils import xyxy2xywh, xywh2xyxy
+
+import cv2
 import glob
 import math
+import numpy as np
 import os
 import random
 import shutil
 import time
-from pathlib import Path
-from threading import Thread
-
-import cv2
-import numpy as np
 import torch
-from PIL import Image, ExifTags
-from torch.utils.data import Dataset
-from tqdm import tqdm
-
-from utils.utils import xyxy2xywh, xywh2xyxy
 
 img_formats = ['.bmp', '.jpg', '.jpeg', '.png', '.tif']
 
@@ -22,21 +21,6 @@ img_formats = ['.bmp', '.jpg', '.jpeg', '.png', '.tif']
 for orientation in ExifTags.TAGS.keys():
     if ExifTags.TAGS[orientation] == 'Orientation':
         break
-
-
-def exif_size(img):
-    # Returns exif-corrected PIL size
-    s = img.size  # (width, height)
-    try:
-        rotation = dict(img._getexif().items())[orientation]
-        if rotation == 6:  # rotation 270
-            s = (s[1], s[0])
-        elif rotation == 8:  # rotation 90
-            s = (s[1], s[0])
-    except:
-        pass
-
-    return s
 
 
 class ImageLoader:  # for inference
@@ -85,143 +69,6 @@ class ImageLoader:  # for inference
 
     def __len__(self):
         return self.nF  # number of files
-
-
-class LoadWebcam:  # for inference
-    def __init__(self, pipe=0, img_size=416, half=False):
-        self.img_size = img_size
-        self.half = half  # half precision fp16 images
-
-        if pipe == '0':
-            pipe = 0  # local camera
-        # pipe = 'rtsp://192.168.1.64/1'  # IP camera
-        # pipe = 'rtsp://username:password@192.168.1.64/1'  # IP camera with login
-        # pipe = 'rtsp://170.93.143.139/rtplive/470011e600ef003a004ee33696235daa'  # IP traffic camera
-        # pipe = 'http://wmccpinetop.axiscam.net/mjpg/video.mjpg'  # IP golf camera
-
-        # https://answers.opencv.org/question/215996/changing-gstreamer-pipeline-to-opencv-in-pythonsolved/
-        # pipe = '"rtspsrc location="rtsp://username:password@192.168.1.64/1" latency=10 ! appsink'  # GStreamer
-
-        # https://answers.opencv.org/question/200787/video-acceleration-gstremer-pipeline-in-videocapture/
-        # https://stackoverflow.com/questions/54095699/install-gstreamer-support-for-opencv-python-package  # install help
-        # pipe = "rtspsrc location=rtsp://root:root@192.168.0.91:554/axis-media/media.amp?videocodec=h264&resolution=3840x2160 protocols=GST_RTSP_LOWER_TRANS_TCP ! rtph264depay ! queue ! vaapih264dec ! videoconvert ! appsink"  # GStreamer
-
-        self.pipe = pipe
-        self.cap = cv2.VideoCapture(pipe)  # video capture object
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
-
-    def __iter__(self):
-        self.count = -1
-        return self
-
-    def __next__(self):
-        self.count += 1
-        if cv2.waitKey(1) == ord('q'):  # q to quit
-            self.cap.release()
-            cv2.destroyAllWindows()
-            raise StopIteration
-
-        # Read frame
-        if self.pipe == 0:  # local camera
-            ret_val, img0 = self.cap.read()
-            img0 = cv2.flip(img0, 1)  # flip left-right
-        else:  # IP camera
-            n = 0
-            while True:
-                n += 1
-                self.cap.grab()
-                if n % 30 == 0:  # skip frames
-                    ret_val, img0 = self.cap.retrieve()
-                    if ret_val:
-                        break
-
-        # Print
-        assert ret_val, 'Camera Error %s' % self.pipe
-        img_path = 'webcam.jpg'
-        print('webcam %g: ' % self.count, end='')
-
-        # Padded resize
-        img = letterbox(img0, new_shape=self.img_size)[0]
-
-        # Normalize RGB
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
-        img = np.ascontiguousarray(img, dtype=np.float16 if self.half else np.float32)  # uint8 to fp16/fp32
-        img /= 255.0  # 0 - 255 to 0.0 - 1.0
-
-        return img_path, img, img0, None
-
-    def __len__(self):
-        return 0
-
-
-class LoadStreams:  # multiple IP or RTSP cameras
-    def __init__(self, sources='streams.txt', img_size=416, half=False):
-        self.mode = 'images'
-        self.img_size = img_size
-        self.half = half  # half precision fp16 images
-
-        if os.path.isfile(sources):
-            with open(sources, 'r') as f:
-                sources = [x.strip() for x in f.read().splitlines() if len(x.strip())]
-        else:
-            sources = [sources]
-
-        n = len(sources)
-        self.imgs = [None] * n
-        self.sources = sources
-        for i, s in enumerate(sources):
-            # Start the thread to read frames from the video stream
-            print('%g/%g: %s... ' % (i + 1, n, s), end='')
-            cap = cv2.VideoCapture(0 if s == '0' else s)
-            assert cap.isOpened(), 'Failed to open %s' % s
-            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = cap.get(cv2.CAP_PROP_FPS) % 100
-            _, self.imgs[i] = cap.read()  # guarantee first frame
-            thread = Thread(target=self.update, args=([i, cap]), daemon=True)
-            print(' success (%gx%g at %.2f FPS).' % (w, h, fps))
-            thread.start()
-        print('')  # newline
-
-    def update(self, index, cap):
-        # Read next stream frame in a daemon thread
-        n = 0
-        while cap.isOpened():
-            n += 1
-            # _, self.imgs[index] = cap.read()
-            cap.grab()
-            if n == 4:  # read every 4th frame
-                _, self.imgs[index] = cap.retrieve()
-                n = 0
-            time.sleep(0.01)  # wait time
-
-    def __iter__(self):
-        self.count = -1
-        return self
-
-    def __next__(self):
-        self.count += 1
-        img0 = self.imgs.copy()
-        if cv2.waitKey(1) == ord('q'):  # q to quit
-            cv2.destroyAllWindows()
-            raise StopIteration
-
-        # Letterbox
-        img = [letterbox(x, new_shape=self.img_size, interp=cv2.INTER_LINEAR)[0] for x in img0]
-
-        # Stack
-        img = np.stack(img, 0)
-
-        # Normalize RGB
-        img = img[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB
-        img = np.ascontiguousarray(img, dtype=np.float16 if self.half else np.float32)  # uint8 to fp16/fp32
-        img /= 255.0  # 0 - 255 to 0.0 - 1.0
-
-        return self.sources, img, img0, None
-
-    def __len__(self):
-        return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years
-
 
 class ImagesPlusLabelLoader(Dataset):  # for training/testing
     def __init__(self, path, img_size=416, batch_size=16, augment=False, hyp=None, rect=True, image_weights=False,
@@ -365,13 +212,7 @@ class ImagesPlusLabelLoader(Dataset):  # for training/testing
 
     def __len__(self):
         return len(self.img_files)
-
-    # def __iter__(self):
-    #     self.count = -1
-    #     print('ran dataset iter')
-    #     #self.shuffled_vector = np.random.permutation(self.nF) if self.augment else np.arange(self.nF)
-    #     return self
-
+        
     def __getitem__(self, index):
         if self.image_weights:
             index = self.indices[index]
@@ -425,10 +266,6 @@ class ImagesPlusLabelLoader(Dataset):  # for training/testing
                                         scale=hyp['scale'] * g,
                                         shear=hyp['shear'] * g)
 
-            # Apply cutouts
-            # if random.random() < 0.9:
-            #     labels = cutout(img, labels)
-
         nL = len(labels)  # number of labels
         if nL:
             # convert xyxy to xywh
@@ -472,6 +309,134 @@ class ImagesPlusLabelLoader(Dataset):  # for training/testing
         return torch.stack(img, 0), torch.cat(label, 0), path, hw
 
 
+def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):
+    x = (np.random.uniform(-1, 1, 3) * np.array([hgain, sgain, vgain]) + 1).astype(np.float32)  # random gains
+    img_hsv = (cv2.cvtColor(img, cv2.COLOR_BGR2HSV) * x.reshape((1, 1, 3))).clip(None, 255).astype(np.uint8)
+    cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR, dst=img)  # no return needed
+
+def convert_images2bmp():
+    # cv2.imread() jpg at 230 img/s, *.bmp at 400 img/s
+    for path in ['../coco/images/val2014/', '../coco/images/train2014/']:
+        folder = os.sep + Path(path).name
+        output = path.replace(folder, folder + 'bmp')
+        if os.path.exists(output):
+            shutil.rmtree(output)  # delete output folder
+        os.makedirs(output)  # make new output folder
+
+        for f in tqdm(glob.glob('%s*.jpg' % path)):
+            save_name = f.replace('.jpg', '.bmp').replace(folder, folder + 'bmp')
+            cv2.imwrite(save_name, cv2.imread(f))
+
+    for label_path in ['../coco/trainvalno5k.txt', '../coco/5k.txt']:
+        with open(label_path, 'r') as file:
+            lines = file.read()
+        lines = lines.replace('2014/', '2014bmp/').replace('.jpg', '.bmp').replace(
+            '/Users/glennjocher/PycharmProjects/', '../')
+        with open(label_path.replace('5k', '5k_bmp'), 'w') as file:
+            file.write(lines)
+
+def create_folder(path='./new_folder'):
+    # Create folder
+    if os.path.exists(path):
+        shutil.rmtree(path)  # delete output folder
+    os.makedirs(path)  # make new output folder
+
+def cutout(image, labels):
+    # https://arxiv.org/abs/1708.04552
+    # https://github.com/hysts/pytorch_cutout/blob/master/dataloader.py
+    # https://towardsdatascience.com/when-conventional-wisdom-fails-revisiting-data-augmentation-for-self-driving-cars-4831998c5509
+    h, w = image.shape[:2]
+
+    def bbox_ioa(box1, box2, x1y1x2y2=True):
+        # Returns the intersection over box2 area given box1, box2. box1 is 4, box2 is nx4. boxes are x1y1x2y2
+        box2 = box2.transpose()
+
+        # Get the coordinates of bounding boxes
+        b1_x1, b1_y1, b1_x2, b1_y2 = box1[0], box1[1], box1[2], box1[3]
+        b2_x1, b2_y1, b2_x2, b2_y2 = box2[0], box2[1], box2[2], box2[3]
+
+        # Intersection area
+        inter_area = (np.minimum(b1_x2, b2_x2) - np.maximum(b1_x1, b2_x1)).clip(0) * \
+                     (np.minimum(b1_y2, b2_y2) - np.maximum(b1_y1, b2_y1)).clip(0)
+
+        # box2 area
+        box2_area = (b2_x2 - b2_x1) * (b2_y2 - b2_y1) + 1e-16
+
+        # Intersection over box2 area
+        return inter_area / box2_area
+
+    # create random masks
+    scales = [0.5] * 1  # + [0.25] * 4 + [0.125] * 16 + [0.0625] * 64 + [0.03125] * 256  # image size fraction
+    for s in scales:
+        mask_h = random.randint(1, int(h * s))
+        mask_w = random.randint(1, int(w * s))
+
+        # box
+        xmin = max(0, random.randint(0, w) - mask_w // 2)
+        ymin = max(0, random.randint(0, h) - mask_h // 2)
+        xmax = min(w, xmin + mask_w)
+        ymax = min(h, ymin + mask_h)
+
+        # apply random color mask
+        mask_color = [random.randint(0, 255) for _ in range(3)]
+        image[ymin:ymax, xmin:xmax] = mask_color
+
+        # return unobscured labels
+        if len(labels) and s > 0.03:
+            box = np.array([xmin, ymin, xmax, ymax], dtype=np.float32)
+            ioa = bbox_ioa(box, labels[:, 1:5])  # intersection over area
+            labels = labels[ioa < 0.90]  # remove >90% obscured labels
+
+    return labels
+
+def exif_size(img):
+    # Returns exif-corrected PIL size
+    s = img.size  # (width, height)
+    try:
+        rotation = dict(img._getexif().items())[orientation]
+        if rotation == 6:  # rotation 270
+            s = (s[1], s[0])
+        elif rotation == 8:  # rotation 90
+            s = (s[1], s[0])
+    except:
+        pass
+
+    return s
+
+def letterbox(img, new_shape=416, color=(128, 128, 128), mode='auto', interp=cv2.INTER_AREA):
+    # Resize a rectangular image to a 32 pixel multiple rectangle
+    # https://github.com/ultralytics/yolov3/issues/232
+    shape = img.shape[:2]  # current shape [height, width]
+
+    if isinstance(new_shape, int):
+        r = float(new_shape) / max(shape)  # ratio  = new / old
+    else:
+        r = max(new_shape) / max(shape)
+    ratio = r, r  # width, height ratios
+    new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
+
+    # Compute padding https://github.com/ultralytics/yolov3/issues/232
+    if mode is 'auto':  # minimum rectangle
+        dw = np.mod(new_shape - new_unpad[0], 32) / 2  # width padding
+        dh = np.mod(new_shape - new_unpad[1], 32) / 2  # height padding
+    elif mode is 'square':  # square
+        dw = (new_shape - new_unpad[0]) / 2  # width padding
+        dh = (new_shape - new_unpad[1]) / 2  # height padding
+    elif mode is 'rect':  # square
+        dw = (new_shape[1] - new_unpad[0]) / 2  # width padding
+        dh = (new_shape[0] - new_unpad[1]) / 2  # height padding
+    elif mode is 'scaleFill':
+        dw, dh = 0.0, 0.0
+        new_unpad = (new_shape, new_shape)
+        ratio = new_shape / shape[1], new_shape / shape[0]  # width, height ratios
+
+    if shape[::-1] != new_unpad:  # resize
+        img = cv2.resize(img, new_unpad, interpolation=interp)  # INTER_AREA is better, INTER_LINEAR is faster
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
+    return img, ratio, dw, dh
+
 def load_image(self, index):
     # loads 1 image from dataset
     img = self.imgs[index]
@@ -484,30 +449,6 @@ def load_image(self, index):
             h, w, _ = img.shape
             img = cv2.resize(img, (int(w * r), int(h * r)), interpolation=cv2.INTER_LINEAR)  # _LINEAR fastest
     return img
-
-
-def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):
-    x = (np.random.uniform(-1, 1, 3) * np.array([hgain, sgain, vgain]) + 1).astype(np.float32)  # random gains
-    img_hsv = (cv2.cvtColor(img, cv2.COLOR_BGR2HSV) * x.reshape((1, 1, 3))).clip(None, 255).astype(np.uint8)
-    cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR, dst=img)  # no return needed
-
-
-# def augment_hsv(img, hgain=0.5, sgain=0.5, vgain=0.5):  # original version
-#     # SV augmentation by 50%
-#     img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)  # hue, sat, val
-#
-#     S = img_hsv[:, :, 1].astype(np.float32)  # saturation
-#     V = img_hsv[:, :, 2].astype(np.float32)  # value
-#
-#     a = random.uniform(-1, 1) * sgain + 1
-#     b = random.uniform(-1, 1) * vgain + 1
-#     S *= a
-#     V *= b
-#
-#     img_hsv[:, :, 1] = S if a < 1 else S.clip(None, 255)
-#     img_hsv[:, :, 2] = V if b < 1 else V.clip(None, 255)
-#     cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR, dst=img)  # no return needed
-
 
 def load_mosaic(self, index):
     # loads images in a mosaic
@@ -559,54 +500,12 @@ def load_mosaic(self, index):
             labels4.append(labels)
     labels4 = np.concatenate(labels4, 0)
 
-    # hyp = self.hyp
-    # img4, labels4 = random_affine(img4, labels4,
-    #                               degrees=hyp['degrees'],
-    #                               translate=hyp['translate'],
-    #                               scale=hyp['scale'],
-    #                               shear=hyp['shear'])
-
     # Center crop
     a = s // 2
     img4 = img4[a:a + s, a:a + s]
     labels4[:, 1:] -= a
 
     return img4, labels4
-
-
-def letterbox(img, new_shape=416, color=(128, 128, 128), mode='auto', interp=cv2.INTER_AREA):
-    # Resize a rectangular image to a 32 pixel multiple rectangle
-    # https://github.com/ultralytics/yolov3/issues/232
-    shape = img.shape[:2]  # current shape [height, width]
-
-    if isinstance(new_shape, int):
-        r = float(new_shape) / max(shape)  # ratio  = new / old
-    else:
-        r = max(new_shape) / max(shape)
-    ratio = r, r  # width, height ratios
-    new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
-
-    # Compute padding https://github.com/ultralytics/yolov3/issues/232
-    if mode is 'auto':  # minimum rectangle
-        dw = np.mod(new_shape - new_unpad[0], 32) / 2  # width padding
-        dh = np.mod(new_shape - new_unpad[1], 32) / 2  # height padding
-    elif mode is 'square':  # square
-        dw = (new_shape - new_unpad[0]) / 2  # width padding
-        dh = (new_shape - new_unpad[1]) / 2  # height padding
-    elif mode is 'rect':  # square
-        dw = (new_shape[1] - new_unpad[0]) / 2  # width padding
-        dh = (new_shape[0] - new_unpad[1]) / 2  # height padding
-    elif mode is 'scaleFill':
-        dw, dh = 0.0, 0.0
-        new_unpad = (new_shape, new_shape)
-        ratio = new_shape / shape[1], new_shape / shape[0]  # width, height ratios
-
-    if shape[::-1] != new_unpad:  # resize
-        img = cv2.resize(img, new_unpad, interpolation=interp)  # INTER_AREA is better, INTER_LINEAR is faster
-    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
-    return img, ratio, dw, dh
 
 
 def random_affine(img, targets=(), degrees=10, translate=.1, scale=.1, shear=10):
@@ -655,16 +554,7 @@ def random_affine(img, targets=(), degrees=10, translate=.1, scale=.1, shear=10)
         x = xy[:, [0, 2, 4, 6]]
         y = xy[:, [1, 3, 5, 7]]
         xy = np.concatenate((x.min(1), y.min(1), x.max(1), y.max(1))).reshape(4, n).T
-
-        # # apply angle-based reduction of bounding boxes
-        # radians = a * math.pi / 180
-        # reduction = max(abs(math.sin(radians)), abs(math.cos(radians))) ** 0.5
-        # x = (xy[:, 2] + xy[:, 0]) / 2
-        # y = (xy[:, 3] + xy[:, 1]) / 2
-        # w = (xy[:, 2] - xy[:, 0]) * reduction
-        # h = (xy[:, 3] - xy[:, 1]) * reduction
-        # xy = np.concatenate((x - w / 2, y - h / 2, x + w / 2, y + h / 2)).reshape(4, n).T
-
+    
         # reject warped points outside of image
         xy[:, [0, 2]] = xy[:, [0, 2]].clip(0, width)
         xy[:, [1, 3]] = xy[:, [1, 3]].clip(0, height)
@@ -679,80 +569,3 @@ def random_affine(img, targets=(), degrees=10, translate=.1, scale=.1, shear=10)
 
     return imw, targets
 
-
-def cutout(image, labels):
-    # https://arxiv.org/abs/1708.04552
-    # https://github.com/hysts/pytorch_cutout/blob/master/dataloader.py
-    # https://towardsdatascience.com/when-conventional-wisdom-fails-revisiting-data-augmentation-for-self-driving-cars-4831998c5509
-    h, w = image.shape[:2]
-
-    def bbox_ioa(box1, box2, x1y1x2y2=True):
-        # Returns the intersection over box2 area given box1, box2. box1 is 4, box2 is nx4. boxes are x1y1x2y2
-        box2 = box2.transpose()
-
-        # Get the coordinates of bounding boxes
-        b1_x1, b1_y1, b1_x2, b1_y2 = box1[0], box1[1], box1[2], box1[3]
-        b2_x1, b2_y1, b2_x2, b2_y2 = box2[0], box2[1], box2[2], box2[3]
-
-        # Intersection area
-        inter_area = (np.minimum(b1_x2, b2_x2) - np.maximum(b1_x1, b2_x1)).clip(0) * \
-                     (np.minimum(b1_y2, b2_y2) - np.maximum(b1_y1, b2_y1)).clip(0)
-
-        # box2 area
-        box2_area = (b2_x2 - b2_x1) * (b2_y2 - b2_y1) + 1e-16
-
-        # Intersection over box2 area
-        return inter_area / box2_area
-
-    # create random masks
-    scales = [0.5] * 1  # + [0.25] * 4 + [0.125] * 16 + [0.0625] * 64 + [0.03125] * 256  # image size fraction
-    for s in scales:
-        mask_h = random.randint(1, int(h * s))
-        mask_w = random.randint(1, int(w * s))
-
-        # box
-        xmin = max(0, random.randint(0, w) - mask_w // 2)
-        ymin = max(0, random.randint(0, h) - mask_h // 2)
-        xmax = min(w, xmin + mask_w)
-        ymax = min(h, ymin + mask_h)
-
-        # apply random color mask
-        mask_color = [random.randint(0, 255) for _ in range(3)]
-        image[ymin:ymax, xmin:xmax] = mask_color
-
-        # return unobscured labels
-        if len(labels) and s > 0.03:
-            box = np.array([xmin, ymin, xmax, ymax], dtype=np.float32)
-            ioa = bbox_ioa(box, labels[:, 1:5])  # intersection over area
-            labels = labels[ioa < 0.90]  # remove >90% obscured labels
-
-    return labels
-
-
-def convert_images2bmp():
-    # cv2.imread() jpg at 230 img/s, *.bmp at 400 img/s
-    for path in ['../coco/images/val2014/', '../coco/images/train2014/']:
-        folder = os.sep + Path(path).name
-        output = path.replace(folder, folder + 'bmp')
-        if os.path.exists(output):
-            shutil.rmtree(output)  # delete output folder
-        os.makedirs(output)  # make new output folder
-
-        for f in tqdm(glob.glob('%s*.jpg' % path)):
-            save_name = f.replace('.jpg', '.bmp').replace(folder, folder + 'bmp')
-            cv2.imwrite(save_name, cv2.imread(f))
-
-    for label_path in ['../coco/trainvalno5k.txt', '../coco/5k.txt']:
-        with open(label_path, 'r') as file:
-            lines = file.read()
-        lines = lines.replace('2014/', '2014bmp/').replace('.jpg', '.bmp').replace(
-            '/Users/glennjocher/PycharmProjects/', '../')
-        with open(label_path.replace('5k', '5k_bmp'), 'w') as file:
-            file.write(lines)
-
-
-def create_folder(path='./new_folder'):
-    # Create folder
-    if os.path.exists(path):
-        shutil.rmtree(path)  # delete output folder
-    os.makedirs(path)  # make new output folder

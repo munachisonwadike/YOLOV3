@@ -1,12 +1,6 @@
-# This file contains google utils: https://cloud.google.com/storage/docs/reference/libraries
-# pip install --upgrade google-cloud-storage
-
 import os
 import time
-
-
-# from google.cloud import storage
-
+ 
 
 def gdrive_download(id='1HaXkef9z6y5l4vUnCYgdmEAj61c6bfWO', name='coco.zip'):
     # https://gist.github.com/tanaikech/f0f2d122e05bf5f971611258c22c110f
