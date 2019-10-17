@@ -128,7 +128,7 @@ def train():
     # backbone reaches to cutoff layer
     cutoff = -1  
     epoch_start = 0
-    best_mAP = 0.
+    best_fit = float('inf')
 
     try_download(weights_) # will only run if not os.path.isfile(weights)
     
@@ -145,7 +145,7 @@ def train():
         # optimizer state dict loading
         if chkpt['optimizer'] is not None:
             optimizer.load_state_dict(chkpt['optimizer'])
-            best_mAP = chkpt['best_fitness']
+            best_fit = chkpt['best_fitness']
 
         # load results  and write to results.txt
         if chkpt.get('training_results') is not None:
@@ -257,8 +257,6 @@ def train():
                 new_shape = [math.ceil(x * scale_factor / 32.) * 32 for x in images.shape[2:]]  # stretched to 32-multiple
                 images = F.interpolate(images, size=new_shape, mode='bilinear', align_corners=False)
 
-
-            ########
             # Plot images with bounding boxes
             if batch_count == 0:
                 fname = 'train_batch%g.jpg' % index
@@ -303,7 +301,7 @@ def train():
             print_model_biases(model)
         else:
             # Calculate mAP 
-            if epoch > 200:
+            if not epoch > 200:
                 # Test final epoch - can skip first 10 if args.nosave
                 if not (args.notest or (args.nosave and epoch < 10)) or final_epoch:
                     with torch.no_grad():
@@ -314,20 +312,21 @@ def train():
                                                   model=model,
                                                   conf_thres=0.001 if final_epoch and epoch > 0 else 0.1,  
                                                   save_json=final_epoch and epoch > 0 and 'coco.data' in data)
+                    
+
         with open(results_fl, 'a') as file:
             file.write(description + '%10.3g' * 7 % results_tuple + '\n')  # P, R, mAP, F1, test_losses=(GIoU, obj, cls)
         
+        fit = sum(results_tuple[4:])
 
-        mAP = results_tuple[2]  
-
-        if mAP > best_mAP:
-            best_mAP = mAP
+        if fit < best_fit:
+            best_fit = fit
 
         save = (not args.nosave) or (final_epoch and not args.evolve) or args.prebias
         if save:
             with open(results_fl, 'r') as f:
                 chkpt = {'epoch': epoch,
-                         'best_fitness': best_mAP,
+                         'best_fitness': best_fit,
                          'training_results': f.read(),
                          'model': model.module.state_dict() if type(
                              model) is nn.parallel.DistributedDataParallel else model.state_dict(),
@@ -335,7 +334,7 @@ def train():
 
             torch.save(chkpt, last)
 
-            if best_mAP == mAP:
+            if best_fit == fit:
                 torch.save(chkpt, best)
 
             # backup every ten epochs
@@ -345,6 +344,8 @@ def train():
  
     if len(args.name):
         os.rename('results.txt', 'results_%s.txt' % args.name)
+        os.rename(weights_dir + 'best.pt', weights_dir + 'best_%s.pt' % opt.name)
+
     results_plotter()  # save as results.png
     print('%g epochs completed in %.3f hours.\n' % (epoch - epoch_start + 1, (time.time() - start_time) / 3600))
     dist.destroy_process_group() if torch.cuda.device_count() > 1 else None
@@ -363,7 +364,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=8)  # effective bs = batch_size * accumulate = 8 *  = 16
     parser.add_argument('--cache-images', action='store_true', help='cache images for faster training')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
-    parser.add_argument('--data', type=str, default='data/coco_16img.data', help='*.data file path')
+    parser.add_argument('--data', type=str, default='data/coco_500val.data', help='*.data file path')
     parser.add_argument('--device', default='', help='device id (i.e. 0 or 0,1) or cpu')
     parser.add_argument('--epochs', type=int, default=273)   
     parser.add_argument('--evolve', action='store_true', help='evolve hyperparameters')
