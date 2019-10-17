@@ -1,9 +1,9 @@
 import argparse
 import json
 
-from torch.utils.data import DataLoader
 
 from models import *
+from torch.utils.data import DataLoader
 from utils.datasets import *
 from utils.utils import *
 

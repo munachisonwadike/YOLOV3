@@ -109,7 +109,7 @@ if __name__ == '__main__':
     parser.add_argument('--nms-threshold', type=float, default=0.5, help='iou threshold for non-maximum suppression')
     parser.add_argument('--output-folder', type=str, default='output', help='output folder')  # output folder
     parser.add_argument('--source', type=str, default='data/samples', help='source')  # input file/folder, 0 for webcam    
-    parser.add_argument('--weights', type=str, default='weights/best.pt', help='path to weights file')
+    parser.add_argument('--weights', type=str, default='weights/yolov3-spp.weights', help='path to weights file')
 
     args = parser.parse_args()
     print(args)
