@@ -186,16 +186,6 @@ def ap_per_class(tp, conf, pred_cls, target_cls):
             # AP from recall-precision curve
             ap.append(compute_ap(recall, precision))
 
-            # Plot
-            # fig, ax = plt.subplots(1, 1, figsize=(4, 4))
-            # ax.plot(np.concatenate(([0.], recall)), np.concatenate(([0.], precision)))
-            # ax.set_xlabel('YOLOv3-SPP')
-            # ax.set_xlabel('Recall')
-            # ax.set_ylabel('Precision')
-            # ax.set_xlim(0, 1)
-            # fig.tight_layout()
-            # fig.savefig('PR_curve.png', dpi=300)
-
     # Compute F1 score (harmonic mean of precision and recall)
     p, r, ap = np.array(p), np.array(r), np.array(ap)
     f1 = 2 * p * r / (p + r + 1e-16)
@@ -445,28 +435,10 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.5):
 
     output = [None] * len(prediction)
     for image_i, pred in enumerate(prediction):
-        # Experiment: Prior class size rejection
-        # x, y, w, h = pred[:, 0], pred[:, 1], pred[:, 2], pred[:, 3]
-        # a = w * h  # area
-        # ar = w / (h + 1e-16)  # aspect ratio
-        # n = len(w)
-        # log_w, log_h, log_a, log_ar = torch.log(w), torch.log(h), torch.log(a), torch.log(ar)
-        # shape_likelihood = np.zeros((n, 60), dtype=np.float32)
-        # x = np.concatenate((log_w.reshape(-1, 1), log_h.reshape(-1, 1)), 1)
-        # from scipy.stats import multivariate_normal
-        # for c in range(60):
-        # shape_likelihood[:, c] =
-        #   multivariate_normal.pdf(x, mean=mat['class_mu'][c, :2], cov=mat['class_cov'][c, :2, :2])
 
         # Multiply conf by class conf to get combined confidence
         class_conf, class_pred = pred[:, 5:].max(1)
         pred[:, 4] *= class_conf
-
-        # # Merge classes (optional)
-        # class_pred[(class_pred.view(-1,1) == torch.LongTensor([2, 3, 5, 6, 7]).view(1,-1)).any(1)] = 2
-        #
-        # # Remove classes (optional)
-        # pred[class_pred != 2, 4] = 0.0
 
         # Select only suitable predictions
         i = (pred[:, 4] > conf_thres) & (pred[:, 2:4] > min_wh).all(1) & torch.isfinite(pred).all(1)
@@ -503,15 +475,7 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.5):
 
             # Non-maximum suppression
             if nms_style == 'OR':  # default
-                # METHOD1
-                # ind = list(range(len(dc)))
-                # while len(ind):
-                # j = ind[0]
-                # det_max.append(dc[j:j + 1])  # save highest conf detection
-                # reject = (bbox_iou(dc[j], dc[ind]) > nms_thres).nonzero()
-                # [ind.pop(i) for i in reversed(reject)]
-
-                # METHOD2
+    
                 while dc.shape[0]:
                     det_max.append(dc[:1])  # save highest conf detection
                     if len(dc) == 1:  # Stop if we're at the last detection

@@ -9,7 +9,7 @@ from utils.datasets import *
 from utils.utils import *
 from visdom import Visdom
 
-weights_dir = 'weights' + os.sep #weights directory
+weights_dir = 'asl_weights' + os.sep #weights directory
 best = weights_dir + 'best.pt' # checkpoint of weights with best mAP
 last = weights_dir + 'last.pt' # checkpoint of weights from most recent forward pass 
 results_fl = 'results.txt'
@@ -364,7 +364,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=6)  # effective bs = batch_size * accumulate = 8 *  = 16
     parser.add_argument('--cache-images', action='store_true', help='cache images for faster training')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='cfg file path')
-    parser.add_argument('--data', type=str, default='data/coco_16img.data', help='*.data file path')
+    parser.add_argument('--data', type=str, default='data/asl_images/asl.data', help='*.data file path')
     parser.add_argument('--device', default='', help='device id (i.e. 0 or 0,1) or cpu')
     parser.add_argument('--epochs', type=int, default=273)   
     parser.add_argument('--evolve', action='store_true', help='evolve hyperparameters')

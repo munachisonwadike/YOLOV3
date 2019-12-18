@@ -6,25 +6,25 @@ def model_cfg_parser(path):
     lines = file.read().split('\n')
     lines = [line for line in lines if line and not line.startswith('#')]
     lines = [line.rstrip().lstrip() for line in lines]  
-    module = []   
+    modules = []   
     for ln in lines:
         # Each new block is identified with brackets []
         if ln.startswith('['):   
-            module.append({})
-            module[-1]['type'] = ln[1:-1].rstrip()
-            if module[-1]['type'] == 'convolutional':
-                module[-1]['batch_normalize'] = 0  
+            modules.append({})
+            modules[-1]['type'] = ln[1:-1].rstrip()
+            if modules[-1]['type'] == 'convolutional':
+                modules[-1]['batch_normalize'] = 0  
         # If we are not at a new block, we are still in the old one
         else:
             k, value = ln.split("=")
             k = k.rstrip()
 
             if 'anchors' in k:
-                module[-1][k] = np.array([float(x) for x in value.split(',')]).reshape((-1, 2))  
+                modules[-1][k] = np.array([float(x) for x in value.split(',')]).reshape((-1, 2))  
             else:
-                module[-1][k] = value.strip()
+                modules[-1][k] = value.strip()
 
-    return module
+    return modules
 
 # Parses the .data configuration file
 def data_cfg_parser(path):
